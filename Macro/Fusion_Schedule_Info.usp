@@ -1,0 +1,157 @@
+/*******************************************************************************************
+  SIMPL+ Module Information
+  (Fill in comments below)
+*******************************************************************************************/
+/*
+Dealer Name:
+System Name:
+System Number:
+Programmer:
+Comments:
+*/
+
+/*******************************************************************************************
+  Compiler Directives
+  (Uncomment and declare compiler directives as needed)
+*******************************************************************************************/
+// #ENABLE_DYNAMIC
+#SYMBOL_NAME "Fusion_Schedule_Info"
+// #HINT ""
+#DEFINE_CONSTANT MaxMeetingNum 30
+// #CATEGORY "" 
+// #PRINT_TO_TRACE
+// #DIGITAL_EXPAND 
+// #ANALOG_SERIAL_EXPAND 
+// #OUTPUT_SHIFT 
+// #HELP_PDF_FILE ""
+#DEFAULT_VOLATILE
+#ENABLE_STACK_CHECKING
+#ENABLE_TRACE
+// #ENCODING_ASCII
+// #ENCODING_UTF16
+// #ENCODING_INHERIT_FROM_PARENT
+// #ENCODING_INHERIT_FROM_PROGRAM
+// #INCLUDEPATH "C:\My File\Project\WORK\2020-9-7 Infocomm 2020\Fusion XML\Fusion_XML\bin\Debug"
+/*
+#HELP_BEGIN
+   (add additional lines of help lines)
+#HELP_END
+*/
+
+/*******************************************************************************************
+  Include Libraries
+  (Uncomment and include additional libraries as needed)
+*******************************************************************************************/
+// #CRESTRON_LIBRARY ""
+// #USER_LIBRARY ""
+#USER_SIMPLSHARP_LIBRARY "Fusion_XML"
+
+/*******************************************************************************************
+  DIGITAL, ANALOG and SERIAL INPUTS and OUTPUTS
+  (Uncomment and declare inputs and outputs as needed)
+*******************************************************************************************/
+DIGITAL_INPUT _skip_,_skip_,Enable_Debug;
+// ANALOG_INPUT 
+// STRING_INPUT 
+BUFFER_INPUT _skip_,ScheduleResponse$[65534];
+
+// DIGITAL_OUTPUT 
+ANALOG_OUTPUT _skip_,_skip_,Meeting_Number;
+ANALOG_OUTPUT _skip_,Meeting_State[MaxMeetingNum];
+STRING_OUTPUT _skip_,Start_Time[MaxMeetingNum],End_Time[MaxMeetingNum],Subject[MaxMeetingNum],Organizer[MaxMeetingNum];
+
+/*******************************************************************************************
+  SOCKETS
+  (Uncomment and define socket definitions as needed)
+*******************************************************************************************/
+// TCP_CLIENT
+// TCP_SERVER
+// UDP_SOCKET
+
+MainProg fusionXML;
+
+/*******************************************************************************************
+  Parameters
+  (Uncomment and declare parameters as needed)
+*******************************************************************************************/
+INTEGER_PARAMETER Buffer_Input_Wait_Time,Schedule_Order;
+// SIGNED_INTEGER_PARAMETER
+// LONG_INTEGER_PARAMETER
+// SIGNED_LONG_INTEGER_PARAMETER
+// STRING_PARAMETER
+
+/*
+#BEGIN_PARAMETER_PROPERTIES Buffer_Input_Wait_Time
+   propValidUnits = unitTime|unitTicks;
+   propDefaultUnit = unitTime;
+   propDefaultValue = 0.3s;
+#END_PARAMETER_PROPERTIES
+
+#BEGIN_PARAMETER_PROPERTIES Schedule_Order
+   propValidUnits = unitDecimal;
+   propDefaultUnit = unitDecimal;
+   propDefaultValue = 0d;
+   propList = { 0d , "In chronological order" } , { 1d , "Reversed by time" };
+   propShortDescription = "Select the order to sort the schedule list";
+#END_PARAMETER_PROPERTIES
+*/
+
+INTEGER Scheduling_Buffer_Input_Wait_Flag,Meeting_Number_Last;
+STRING From_Fusion[65534];
+
+
+EVENTHANDLER meetingsCallFn(MainProg sender,MeetingsArgs meetingsF)
+{
+	integer mark;
+	mark = meetingsF.meetingNum + 1;
+	if(mark <= MaxMeetingNum)
+	{
+		if ( meetingsF.listCount <> Meeting_Number_Last )
+		{
+			Meeting_Number_Last = meetingsF.listCount;
+			Meeting_Number = Meeting_Number_Last;
+		}
+		Start_Time[mark] = meetingsF.startTime;
+		End_Time[mark] = meetingsF.endTime;
+		Subject[mark] = meetingsF.subject;
+		Organizer[mark] = meetingsF.organizer;
+		Meeting_State[mark] = meetingsF.confState;
+	}
+}
+
+
+Function Assign_Scheduling_Buffer_Input()
+{
+	wait ( Buffer_Input_Wait_Time , Scheduling_Buffer_Input_Wait )
+	{
+		Scheduling_Buffer_Input_Wait_Flag = 0;
+		From_Fusion = ScheduleResponse$;
+		clearbuffer ( ScheduleResponse$ );
+		
+		fusionXML.getMeetings(From_Fusion);
+	}
+}
+
+
+CHANGE Enable_Debug
+{
+	fusionXML.pDebugging = Enable_Debug;
+}
+
+CHANGE ScheduleResponse$
+{
+	integer Break_Flag,i;
+	if ( Scheduling_Buffer_Input_Wait_Flag = 1 )
+		Cancelwait ( Scheduling_Buffer_Input_Wait );	
+	else
+		Scheduling_Buffer_Input_Wait_Flag = 1;
+	Assign_Scheduling_Buffer_Input();
+}
+
+
+Function Main()
+{
+	delay ( 1000 );
+	
+	RegisterEvent(fusionXML,meetingsCallback,meetingsCallFn);
+}
